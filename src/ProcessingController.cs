@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 
 namespace TestJob.Api;
@@ -18,6 +19,6 @@ public sealed class ProcessingController(ProcessingService service) : Controller
     [ProducesResponseType<ProcessingResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProcessingResponse>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ProcessingResponse>> Process(
-        [FromBody] ProcessingRequest request, CancellationToken cancellationToken) =>
+        [FromBody, Required] ProcessingRequest request, CancellationToken cancellationToken) =>
         Ok(await service.ProcessAsync(request, cancellationToken));
 }

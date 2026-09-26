@@ -5,6 +5,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
 using Npgsql;
+using Swashbuckle.AspNetCore.SwaggerGen;
 using TestJob.Api;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,7 @@ builder.Services.AddSwaggerGen(options =>
         Description = "HTML processing and AES-256/ECB decryption. POST /api/process."
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "TestJob.Api.xml"));
+    options.SchemaFilter<ProcessingRequestSchemaFilter>();
 });
 
 var app = builder.Build();
@@ -101,3 +103,20 @@ await using (var scope = app.Services.CreateAsyncScope())
         .InitializeAsync(app.Lifetime.ApplicationStopping);
 }
 await app.RunAsync();
+
+internal sealed class ProcessingRequestSchemaFilter : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        if (context.Type != typeof(ProcessingRequest)
+            || schema is not OpenApiSchema requestSchema
+            || requestSchema.Properties is not { } properties)
+            return;
+
+        // All request fields are mandatory. Keep the DTO nullable so FluentValidation,
+        // rather than model binding, returns our existing missing-parameter errors.
+        requestSchema.Required = new HashSet<string>(properties.Keys);
+        foreach (var property in properties.Values.OfType<OpenApiSchema>())
+            property.Type &= ~JsonSchemaType.Null;
+    }
+}

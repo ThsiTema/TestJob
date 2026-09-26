@@ -63,6 +63,18 @@ def b64(text):
     return base64.b64encode(text.encode("utf-8")).decode("ascii")
 
 
+def check_emails(original, html, expected):
+    global checks
+    before = count()
+    status, data, _ = post({**original, "page_b64": b64(html),
+                          "selector": "element-that-does-not-exist"})
+    assert status == 200 and data["is_error"] == 0, (html, status, data)
+    assert data["emails_list"] == expected, (html, data["emails_list"], expected)
+    assert data["emails_count"] == len(expected), data
+    assert count() == before, "Email-only check should not insert rows"
+    checks += 1
+
+
 def main():
     global checks
     original = json.loads((ROOT / "json_payload_1.txt").read_text(encoding="utf-8"))
@@ -126,13 +138,37 @@ def main():
                            '<p>Без атрибута</p>'], stored_html
     checks += 1
 
+    for html, expected in [
+        ("o'connor@example.org +tag@example.org", ["o'connor@example.org", "+tag@example.org"]),
+        ("o'connor@example.org o'connor@example.org", ["o'connor@example.org"] * 2),
+        ("'lead@example.org trail'@example.org", ["'lead@example.org", "trail'@example.org"]),
+        ('<a href="mailto:o\'connor@example.org">mail</a>', ["o'connor@example.org"]),
+        ("<span data-email='alice@example.org'>mail</span>", ["alice@example.org"]),
+        ('<span data-email="o\'connor@example.org">mail</span>', ["o'connor@example.org"]),
+        ("<span data-email=alice@example.org>mail</span>", ["alice@example.org"]),
+        ("Contact (+tag@example.org), then Alice.Smith@sub-domain.example.org.",
+         ["+tag@example.org", "Alice.Smith@sub-domain.example.org"]),
+        ("alice@example..org alice@-example.org alice@example-.org", []),
+        ("alice..smith@example.org .alice@example.org alice.@example.org", []),
+        ("alice@@example.org alice@example.org_bad alice@example.org7", []),
+        ("alice@example.org..bad alice@example.org- alice@example.org@other.org", []),
+        ('"quoted local"@example.org "inner@example.org"@example.net', []),
+        ("юзер@example.org alice@пример.org", []),
+    ]:
+        check_emails(original, html, expected)
+
     status, data, _ = post(original, content_type="text/plain")
     assert status == 415 and data["is_error"] == 1, (status, data)
     checks += 1
     with urllib.request.urlopen(BASE + "/api/swagger/v1/swagger.json") as response:
         document = json.load(response)
         assert "/api/process" in document["paths"]
-        assert set(document["components"]["schemas"]["ProcessingRequest"]["properties"]) == set(original)
+        schema = document["components"]["schemas"]["ProcessingRequest"]
+        assert set(schema["properties"]) == set(original)
+        assert set(schema.get("required", [])) == set(original), schema
+        for name, definition in schema["properties"].items():
+            assert definition["type"] == "string" and not definition.get("nullable", False), (name, definition)
+        assert document["paths"]["/api/process"]["post"]["requestBody"]["required"] is True
     checks += 1
     print(f"PASS: {checks} integration checks; both json_result files saved.")
 

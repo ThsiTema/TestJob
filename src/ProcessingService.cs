@@ -14,9 +14,20 @@ public sealed class ProcessingService(
     IValidator<ProcessingRequest> validator)
 {
     private static readonly UTF8Encoding Utf8 = new(false, true);
+    private const string EmailAddress =
+        @"[A-Z0-9_%+'-]+(?:\.[A-Z0-9_%+'-]+)*@" +
+        @"(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,63}";
     private static readonly Regex EmailRegex = new(
-        @"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        $$"""
+        (?<![\p{L}\p{N}\p{M}._%+'@-])
+        (?<quote>["'])(?<email>{{EmailAddress}})\k<quote>(?!@)
+        |
+        (?<![\p{L}\p{N}\p{M}._%+'@"-])
+        (?<email>{{EmailAddress}})
+        (?![\p{L}\p{N}\p{M}_@-]|\.[\p{L}\p{N}\p{M}_.-]|["']@)
+        """,
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            | RegexOptions.IgnorePatternWhitespace,
         TimeSpan.FromSeconds(2));
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -87,7 +98,8 @@ public sealed class ProcessingService(
         foreach (Match match in EmailRegex.Matches(html))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            emails.Add(match.Value);
+            // Exclude enclosing HTML quotes, while preserving apostrophes in the address.
+            emails.Add(match.Groups["email"].Value);
         }
 
         if (elements.Length > 0)
