@@ -1,0 +1,71 @@
+name: testjob
+
+services:
+  api:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /app
+    command: ["sh", "-c", "dotnet restore --locked-mode && dotnet build --no-restore -c Release && exec dotnet bin/Release/net10.0/TestJob.Api.dll"]
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8090"
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=testjob;Username=testjob;Password=testjob-local
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      Logging__LogLevel__Microsoft: Warning
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./src:/app
+      - api_bin:/app/bin
+      - api_obj:/app/obj
+      - nuget:/root/.nuget/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: testjob
+      POSTGRES_USER: testjob
+      POSTGRES_PASSWORD: testjob-local
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testjob -d testjob"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: testjob-local
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_DISABLE_POSTFIX: "1"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      PGPASS_FILE: /pgpass
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./pgadmin/pgpass:/pgpass:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  api_bin:
+  api_obj:
+  nuget:

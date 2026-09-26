@@ -1,0 +1,17 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "TestJob PostgreSQL 18",
+      "Group": "TestJob",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "testjob",
+      "Username": "testjob",
+      "ConnectionParameters": {
+        "sslmode": "prefer",
+        "connect_timeout": 10,
+        "passfile": "/var/lib/pgadmin/.pgpass"
+      }
+    }
+  }
+}
